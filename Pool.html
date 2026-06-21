@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MSpa & PoolLab Smart Manager</title>
+    <style>
+        body { font-family: -apple-system, sans-serif; background: #f0f4f8; padding: 15px; color: #2d3748; }
+        .card { background: white; padding: 25px; border-radius: 16px; box-shadow: 0 4px 15px rgba(0,0,0,0.08); max-width: 480px; margin: 0 auto; }
+        h2 { color: #005f73; margin-top: 0; border-bottom: 2px solid #94d2bd; padding-bottom: 8px; }
+        .info { background: #e9d8a6; padding: 8px; border-radius: 6px; font-size: 0.85rem; margin-bottom: 15px; font-weight: bold; color: #005f73; }
+        .form-group { margin-bottom: 15px; }
+        label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 0.9rem; }
+        select, input { width: 100%; padding: 12px; border: 1px solid #cbd5e0; border-radius: 8px; box-sizing: border-box; background: #f8fafc; font-size: 1rem; }
+        select:focus, input:focus { outline: none; border-color: #0a9396; }
+        .result { background: #f0f9fa; border-left: 5px solid #0a9396; padding: 15px; border-radius: 0 4px 4px 0; margin-top: 15px; }
+        .value { font-size: 1.3rem; font-weight: bold; color: #ae2012; margin: 5px 0; }
+        .warn { background: #fff5f5; border-left: 5px solid #e53e3e; padding: 12px; border-radius: 0 4px 4px 0; margin-top: 15px; color: #c53030; font-size: 0.85rem; }
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <h2>PoolLab 2.0 Smart-Manager</h2>
+    <div class="info">MSpa Mono (930L) | Filterbälle aktiv</div>
+
+    <!-- NEU: Temperatur-Feld -->
+    <div class="form-group">
+        <label for="temp">Aktuelle Wassertemperatur (°C):</label>
+        <input type="number" id="temp" value="36" min="15" max="42" oninput="calculate()">
+    </div>
+
+    <div class="form-group">
+        <label for="modus">Vorgang / PoolLab Messung:</label>
+        <select id="modus" onchange="updateView()">
+            <option value="mps">Aktivsauerstoff (MPS) gemessen</option>
+            <option value="aktivator">Aktivator (Flüssig)</option>
+            <option value="ph">pH-Wert gemessen</option>
+            <option value="kristall">Kristallklar flüssig</option>
+            <option value="schock">Stoßchlorung (Reset)</option>
+        </select>
+    </div>
+
+    <div id="dynamic"></div>
+
+    <div class="result">
+        <div id="res-titel" style="font-weight:bold; color:#005f73;">Berechnung:</div>
+        <div id="res-wert" class="value">-</div>
+        <div id="res-hinweis" style="font-size:0.85rem;">-</div>
+    </div>
+
+    <div id="warnbox" class="warn hidden"></div>
+</div>
+
+<script>
+function updateView() {
+    const m = document.getElementById('modus').value;
+    const d = document.getElementById('dynamic');
+    d.innerHTML = '';
+
+    if(m==='mps') {
+        d.innerHTML = '<div class="form-group"><label>PoolLab MPS-Wert (mg/l):</label><input type="number" id="val" step="0.5" value="2.0" oninput="calculate()"></div>';
+    } else if(m==='ph') {
+        d.innerHTML = '<div class="form-group"><label>PoolLab pH-Wert:</label><input type="number" id="val" step="0.1" value="7.6" oninput="calculate()"></div>';
+    } else if(m==='aktivator') {
+        d.innerHTML = '<div class="form-group"><label>Typ:</label><select id="val" onchange="calculate()"><option value="1">Erstbefüllung</option><option value="2">Wöchentlich</option></select></div>';
+    }
+    calculate();
+}
+
+function calculate() {
+    const m = document.getElementById('modus').value;
+    const temp = parseFloat(document.getElementById('temp').value) || 35;
+    const t = document.getElementById('res-titel');
+    const w = document.getElementById('res-wert');
+    const h = document.getElementById('res-hinweis');
+    const wb = document.getElementById('warnbox');
+    wb.classList.add('hidden');
+
+    // Temperatur-Faktor: Wenn über 34 Grad, wird die Chemie um 25% erhöht
+    let factor = temp > 34 ? 1.25 : 1.0;
+    
+    if(m==='mps') {
+        t.innerText = "Aktivsauerstoff-Dosierung:";
+        let v = parseFloat(document.getElementById('val')?.value) || 0;
+        if(v >= 5.0) { 
+            w.innerText = "Optimal (Keine Zugabe)"; 
+            h.innerText = "Dein Sauerstoffwert ist im grünen Bereich."; 
+        } else { 
+            let g = Math.round(16 * factor);
+            w.innerText = "ca. " + g + " Gramm Granulat";
+            h.innerHTML = temp > 34 ? "<strong>Temperatur-Kompensation (+25%):</strong> Aufgrund der Wärme (" + temp + "°C) verfliegt Sauerstoff schneller. Dosis automatisch angepasst!" : "Normaldosis für kühles Wasser.";
+        }
+    }
+    else if(m==='ph') {
+        let v = parseFloat(document.getElementById('val')?.value) || 7.2;
+        if(v > 7.4) { 
+            t.innerText = "Benötigte Menge pH-Minus:"; 
+            let g = Math.round((v-7.2)*93); 
+            w.innerText = "ca. " + g + " Gramm"; 
+            h.innerText = "Im Eimer auflösen und ins Wasser geben. Achtung: Bei Hitze steigt der pH-Wert schneller!"; 
+        } else if(v < 7.0) { 
+            t.innerText = "Benötigte Menge pH-Plus:"; 
+            let g = Math.round((7.2-v)*93); 
+            w.innerText = "ca. " + g + " Gramm"; 
+            h.innerText = "Im Eimer auflösen."; 
+        } else { 
+            t.innerText = "pH-Wert Ideal"; 
+            w.innerText = v; 
+            h.innerText = "Zwischen 7.0 und 7.4 arbeitet dein Aktivsauerstoff perfekt."; 
+        }
+    }
+    else if(m==='aktivator') {
+        t.innerText = "Sauerstoff-Aktivator (Flüssig):";
+        let v = document.getElementById('val')?.value;
+        w.innerText = v === "1" ? "ca. 20 ml einmalig" : "ca. 10 ml wöchentlich";
+        h.innerText = "Der flüssige Aktivator verhindert Algenbildung und unterstützt das Granulat.";
+    }
+    else if(m==='kristall') {
+        t.innerText = "Flüssig-Kristallklar:"; 
+        w.innerText = "ca. 15 ml"; 
+        h.innerText = "Sorgt dafür, dass Fette und Trübungen gebunden werden.";
+        wb.classList.remove('hidden'); 
+        wb.innerHTML = "<strong>WARNUNG FILTERBÄLLE:</strong> Flüssige Klarmittel verklumpen den Schmutz. Das zerstört deine Filterbälle in wenigen Stunden! Nutze dieses Mittel NUR, wenn du für 48 Stunden eine normale Papierkartusche einsetzt!";
+    }
+    else if(m==='schock') {
+        t.innerText = "Stoßchlorung (Reset bei Schaum):"; 
+        w.innerText = "ca. 20 Gramm Chlorgranulat"; 
+        h.innerHTML = "Chlor im Eimer auflösen. Pool unbedeckt 30 Min. filtern lassen. <strong>Wichtig:</strong> Filterbälle nach 24 Std. in der Waschmaschine (30°C, kein Waschmittel) auswaschen, um den gelösten Schleim zu entfernen!";
+    }
+}
+window.onload = updateView;
+</script>
+</body>
+</html>
